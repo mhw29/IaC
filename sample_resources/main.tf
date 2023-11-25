@@ -239,6 +239,12 @@ resource "aws_iam_role_policy_attachment" "ecs_task_execution_role_policy" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
+resource "aws_iam_role_policy_attachment" "ecs_cloudwatch_logs" {
+  role       = aws_iam_role.ecs_task_execution_role.name
+  policy_arn = "arn:aws:iam::aws:policy/CloudWatchLogsFullAccess"
+}
+
+
 resource "aws_cloudwatch_log_group" "ecs_log_group" {
   name = "/ecs/my-ecs-log-group" // Replace with your desired log group name
 
@@ -262,7 +268,7 @@ resource "aws_ecs_task_definition" "ecs_task_definition" {
  container_definitions = jsonencode([
    {
      name      = "dockergs"
-     image     = "public.ecr.aws/f9n5f1l7/dgs:latest"
+     image     = "nginx:latest"
      cpu       = 256
      memory    = 512
      essential = true
