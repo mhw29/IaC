@@ -4,7 +4,7 @@ provider "aws" {
 
 # Create an IAM role for the EKS cluster
 resource "aws_iam_role" "eks_cluster_role" {
-  name = "example-eks-cluster-role"
+  name = "portfolio-eks-cluster-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17",
@@ -31,9 +31,19 @@ resource "aws_iam_role_policy_attachment" "eks_vpc_resource_controller" {
   role       = aws_iam_role.eks_cluster_role.name
 }
 
+resource "aws_iam_role_policy_attachment" "describe_subnets" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2FullAccess"
+  role       = aws_iam_role.eks_cluster_role.name
+}
+
+resource "aws_iam_role_policy_attachment" "route53" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonRoute53FullAccess"
+  role       = aws_iam_role.eks_cluster_role.name
+}
+
 # Create the EKS cluster
-resource "aws_eks_cluster" "example" {
-  name     = "example-cluster"
+resource "aws_eks_cluster" "cluster" {
+  name     = "portfolio-cluster"
   role_arn = aws_iam_role.eks_cluster_role.arn
 
   vpc_config {
@@ -43,7 +53,7 @@ resource "aws_eks_cluster" "example" {
 
 # Create an IAM role for the EKS node group
 resource "aws_iam_role" "eks_node_group_role" {
-  name = "example-eks-node-group-role"
+  name = "portfolio-eks-node-group-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17",
@@ -76,9 +86,9 @@ resource "aws_iam_role_policy_attachment" "ec2_container_registry_read" {
 }
 
 # Create an EKS node group
-resource "aws_eks_node_group" "example" {
-  cluster_name    = aws_eks_cluster.example.name
-  node_group_name = "example-node-group"
+resource "aws_eks_node_group" "portfolio_node_group" {
+  cluster_name    = aws_eks_cluster.cluster.name
+  node_group_name = "portfolio-node-group"
   node_role_arn   = aws_iam_role.eks_node_group_role.arn
   subnet_ids      = var.subnet_ids
 

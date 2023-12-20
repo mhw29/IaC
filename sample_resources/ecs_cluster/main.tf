@@ -54,9 +54,6 @@ resource "aws_route_table_association" "b" {
     route_table_id = aws_route_table.default.id
 }
 
-
-
-
 resource "aws_service_discovery_private_dns_namespace" "example" {
   name        = "service"
   vpc         = aws_vpc.vpc.id
