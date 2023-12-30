@@ -1,0 +1,14 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: portfolio-service
+  annotations:
+    external-dns.alpha.kubernetes.io/hostname: portfolio.mattwilliamson.io
+spec:
+  selector:
+    app: portfolio
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 8000
+  type: LoadBalancer

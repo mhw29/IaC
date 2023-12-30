@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: portfolio-app
+  labels:
+    app: portfolio
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: portfolio
+  template:
+    metadata:
+      labels:
+        app: portfolio
+    spec:
+      containers:
+        - image: 943337485558.dkr.ecr.us-east-1.amazonaws.com/portfolio:latest
+          name: portfolio
+          ports:
+            - containerPort: 8000
+              name: gunicorn
