@@ -183,6 +183,34 @@ resource "aws_iam_role" "portfolio_project_role" {
     })
 }
 
+resource "aws_iam_role" "portfolio_pipeline_role" {
+  name = "portfolio_pipeline_role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Principal = {
+          Service = "codepipeline.amazonaws.com"
+        },
+        Action = "sts:AssumeRole"
+      }
+    ]
+  })
+}
+
+
+resource "aws_iam_role_policy_attachment" "portfolio_pipeline_attachment" {
+    role       = aws_iam_role.portfolio_pipeline_role.name
+    policy_arn = aws_iam_policy.pipeline_role_policy.arn
+}
+
+resource "aws_iam_role_policy_attachment" "portfolio_project_attachment" {
+    role       = aws_iam_role.portfolio_project_role.name
+    policy_arn = aws_iam_policy.pipeline_role_policy.arn
+}
+
 resource "aws_iam_policy" "ecr_push_policy" {
     name        = "ecr-push-policy"
     description = "ECR push policy"
@@ -226,3 +254,281 @@ resource "aws_iam_role_policy_attachment" "portfolio_project_secrets_manager_att
   policy_arn = "arn:aws:iam::aws:policy/SecretsManagerReadWrite"
   role       = aws_iam_role.portfolio_project_role.name
 }
+
+resource "aws_iam_role_policy_attachment" "portfolio_project_s3_attachment" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonS3FullAccess"
+  role       = aws_iam_role.portfolio_project_role.name
+}
+
+resource "aws_iam_role_policy_attachment" "portfolio_project_codestar_attachment" {
+  policy_arn = "arn:aws:iam::aws:policy/AWSCodeStarFullAccess"
+  role       = aws_iam_role.portfolio_project_role.name
+}
+
+# AWS CodePipeline
+resource "aws_codepipeline" "portfolio_pipeline" {
+  name     = "portfolio-pipeline"
+  role_arn = aws_iam_role.portfolio_pipeline_role.arn
+
+  artifact_store {
+    location = aws_s3_bucket.pipeline_artifact_store.bucket
+    type     = "S3"
+  }
+
+  stage {
+    name = "Source"
+    action {
+      name             = "GitHub_Source"
+      category         = "Source"
+      owner            = "AWS"
+      provider         = "CodeStarSourceConnection"
+      version          = "1"
+      output_artifacts = ["source_output"]
+      
+      configuration = {
+        ConnectionArn    = "arn:aws:codestar-connections:us-east-1:943337485558:connection/53e3ac89-0880-451d-9245-ddc5068ede47"
+        FullRepositoryId = "mhw29/portfolio"
+        BranchName       = "main" # Specify the branch name
+        DetectChanges    = "false" # Set to false to use webhook filters
+        OutputArtifactFormat = "CODEBUILD_CLONE_REF"
+      }
+    }
+  }
+
+  stage {
+    name = "Build"
+    action {
+      name             = "Build"
+      category         = "Build"
+      owner            = "AWS"
+      provider         = "CodeBuild"
+      input_artifacts  = ["source_output"]
+      version          = "1"
+      run_order        = 1
+
+      configuration = {
+        ProjectName = aws_codebuild_project.portfolio_project.name
+      }
+    }
+  }
+  # Add additional stages as needed (e.g., Deploy)
+}
+
+# Webhook Filter for CodePipeline to trigger on specific Git tags
+resource "aws_codepipeline_webhook" "portfolio_webhook" {
+  name            = "portfolio-webhook"
+  authentication  = "UNAUTHENTICATED"  # No HMAC authentication needed with CodeStar Connections
+  target_action   = "GitHub_Source"
+  target_pipeline = aws_codepipeline.portfolio_pipeline.name
+
+  filter {
+    json_path    = "$.ref"
+    match_equals = "refs/tags/v{[0-9]+.[0-9]+.[0-9]+}"
+  }
+
+  # Exclude tags containing 'alpha'
+  filter {
+    json_path    = "$.ref"
+    match_equals = "!refs/tags/*alpha*"
+  }
+}
+
+# S3 Bucket for Pipeline Artifacts
+resource "aws_s3_bucket" "pipeline_artifact_store" {
+  bucket = "portfolio-pipeline-artifacts"
+  acl    = "private"
+}
+
+# Codepipeline role policy
+resource "aws_iam_policy" "pipeline_role_policy" {
+  name = "pipeline-role-policy"
+  policy = jsonencode({
+    "Version": "2012-10-17",
+      "Statement": [
+          {
+              "Action": [
+                  "iam:PassRole"
+              ],
+              "Resource": "*",
+              "Effect": "Allow",
+              "Condition": {
+                  "StringEqualsIfExists": {
+                      "iam:PassedToService": [
+                          "cloudformation.amazonaws.com",
+                          "elasticbeanstalk.amazonaws.com",
+                          "ec2.amazonaws.com",
+                          "ecs-tasks.amazonaws.com"
+                      ]
+                  }
+              }
+          },
+          {
+              "Action": [
+                  "codecommit:CancelUploadArchive",
+                  "codecommit:GetBranch",
+                  "codecommit:GetCommit",
+                  "codecommit:GetRepository",
+                  "codecommit:GetUploadArchiveStatus",
+                  "codecommit:UploadArchive"
+              ],
+              "Resource": "*",
+              "Effect": "Allow"
+          },
+          {
+              "Action": [
+                  "codedeploy:CreateDeployment",
+                  "codedeploy:GetApplication",
+                  "codedeploy:GetApplicationRevision",
+                  "codedeploy:GetDeployment",
+                  "codedeploy:GetDeploymentConfig",
+                  "codedeploy:RegisterApplicationRevision"
+              ],
+              "Resource": "*",
+              "Effect": "Allow"
+          },
+          {
+              "Action": [
+                  "codestar-connections:UseConnection"
+              ],
+              "Resource": "*",
+              "Effect": "Allow"
+          },
+          {
+              "Action": [
+                  "elasticbeanstalk:*",
+                  "ec2:*",
+                  "elasticloadbalancing:*",
+                  "autoscaling:*",
+                  "cloudwatch:*",
+                  "s3:*",
+                  "sns:*",
+                  "cloudformation:*",
+                  "rds:*",
+                  "sqs:*",
+                  "ecs:*"
+              ],
+              "Resource": "*",
+              "Effect": "Allow"
+          },
+          {
+              "Action": [
+                  "lambda:InvokeFunction",
+                  "lambda:ListFunctions"
+              ],
+              "Resource": "*",
+              "Effect": "Allow"
+          },
+          {
+              "Action": [
+                  "opsworks:CreateDeployment",
+                  "opsworks:DescribeApps",
+                  "opsworks:DescribeCommands",
+                  "opsworks:DescribeDeployments",
+                  "opsworks:DescribeInstances",
+                  "opsworks:DescribeStacks",
+                  "opsworks:UpdateApp",
+                  "opsworks:UpdateStack"
+              ],
+              "Resource": "*",
+              "Effect": "Allow"
+          },
+          {
+              "Action": [
+                  "cloudformation:CreateStack",
+                  "cloudformation:DeleteStack",
+                  "cloudformation:DescribeStacks",
+                  "cloudformation:UpdateStack",
+                  "cloudformation:CreateChangeSet",
+                  "cloudformation:DeleteChangeSet",
+                  "cloudformation:DescribeChangeSet",
+                  "cloudformation:ExecuteChangeSet",
+                  "cloudformation:SetStackPolicy",
+                  "cloudformation:ValidateTemplate"
+              ],
+              "Resource": "*",
+              "Effect": "Allow"
+          },
+          {
+              "Action": [
+                  "codebuild:BatchGetBuilds",
+                  "codebuild:StartBuild",
+                  "codebuild:BatchGetBuildBatches",
+                  "codebuild:StartBuildBatch"
+              ],
+              "Resource": "*",
+              "Effect": "Allow"
+          },
+          {
+              "Effect": "Allow",
+              "Action": [
+                  "devicefarm:ListProjects",
+                  "devicefarm:ListDevicePools",
+                  "devicefarm:GetRun",
+                  "devicefarm:GetUpload",
+                  "devicefarm:CreateUpload",
+                  "devicefarm:ScheduleRun"
+              ],
+              "Resource": "*"
+          },
+          {
+              "Effect": "Allow",
+              "Action": [
+                  "servicecatalog:ListProvisioningArtifacts",
+                  "servicecatalog:CreateProvisioningArtifact",
+                  "servicecatalog:DescribeProvisioningArtifact",
+                  "servicecatalog:DeleteProvisioningArtifact",
+                  "servicecatalog:UpdateProduct"
+              ],
+              "Resource": "*"
+          },
+          {
+              "Effect": "Allow",
+              "Action": [
+                  "cloudformation:ValidateTemplate"
+              ],
+              "Resource": "*"
+          },
+          {
+              "Effect": "Allow",
+              "Action": [
+                  "ecr:DescribeImages"
+              ],
+              "Resource": "*"
+          },
+          {
+              "Effect": "Allow",
+              "Action": [
+                  "states:DescribeExecution",
+                  "states:DescribeStateMachine",
+                  "states:StartExecution"
+              ],
+              "Resource": "*"
+          },
+          {
+              "Effect": "Allow",
+              "Action": [
+                  "appconfig:StartDeployment",
+                  "appconfig:StopDeployment",
+                  "appconfig:GetDeployment"
+              ],
+              "Resource": "*"
+          }
+      ],
+      "Version": "2012-10-17"
+  })
+}
+
+# IAM Role for CodePipeline
+# resource "aws_iam_role" "portfolio_pipeline_role" {
+#   name = "portfolio-pipeline-role"
+
+#   assume_role_policy = jsonencode({
+      
+# }
+
+#Attach necessary policies to the pipeline role
+resource "aws_iam_role_policy_attachment" "pipeline_basic_execution" {
+  role       = aws_iam_role.portfolio_pipeline_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AWSCodePipeline_FullAccess"
+}
+
