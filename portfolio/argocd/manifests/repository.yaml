@@ -7,8 +7,5 @@ metadata:
     argocd.argoproj.io/secret-type: repository
 stringData:
   type: git
-  url: git@github.com:mhw29/IaC.git
-  sshPrivateKey: |
-    -----BEGIN OPENSSH PRIVATE KEY-----
-    ...
-    -----END OPENSSH PRIVATE KEY-----
+  url: git@github.com:mhw29/portfolio.git
+  sshPrivateKey: cat /Users//matthewwilliamson/.ssh/id_rsa
