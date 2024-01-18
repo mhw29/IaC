@@ -7,7 +7,7 @@ data "aws_vpc" "existing_vpc" {
 }
 
 resource "aws_subnet" "subnet_public_1a" {
-    id = var.subnet_public_1a
+  id = var.subnet_public_1a
 }
 
 # Create ecs cluster from cluster.tf module

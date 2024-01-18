@@ -7,3 +7,5 @@ A software solution aimed at solving project management challenges within a cros
 Product Consilium brings various department systems together in a single unified view to drive collaboration and efficiency. 
 
 ## Sample Resources
+helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+
